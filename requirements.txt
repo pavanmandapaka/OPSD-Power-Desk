@@ -4,3 +4,5 @@ matplotlib
 seaborn 
 statsmodels
 tqdm
+tensorflow
+scikit-learn
