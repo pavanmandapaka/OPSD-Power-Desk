@@ -6,3 +6,5 @@ statsmodels
 tqdm
 tensorflow
 scikit-learn
+streamlit
+plotly

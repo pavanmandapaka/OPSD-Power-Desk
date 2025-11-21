@@ -21,12 +21,11 @@ def train_anomaly_classifier():
         print("Error: Labels file not found. Please complete Phase 1 labeling.")
         return
 
-    # 2. Load Full Feature Data (Original Data)
-    # We need to re-create features (lags, etc) for these timestamps
+    
+    
     data_path = os.path.join(DATA_DIR, f'{COUNTRY}.csv')
     df_features = pd.read_csv(data_path, parse_dates=['timestamp'], index_col='timestamp')
 
-    # 3. Feature Engineering
     df_features['hour'] = df_features.index.hour
     df_features['dayofweek'] = df_features.index.dayofweek
 

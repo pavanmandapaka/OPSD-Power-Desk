@@ -9,18 +9,31 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, 'outputs')
 
-COUNTRY = 'DE'
 SIM_START_HOURS = 2000
 HISTORY_WINDOW = 336
 DRIFT_WINDOW = 720
 REFIT_WINDOW = 2160 
 
-MODEL_ORDER = (2, 1, 2) 
-SEASONAL_ORDER = (1, 1, 1, 24)
+COUNTRY_CONFIGS = {
+    'DE': {
+        'order': (2, 1, 2),
+        'seasonal_order': (1, 1, 1, 24)
+    },
+    'FR': {
+        'order': (1, 1, 1),
+        'seasonal_order': (1, 1, 1, 24)
+    },
+    'ES': {
+        'order': (1, 1, 1),
+        'seasonal_order': (1, 1, 1, 24)
+    }
+}
 
 class LiveSimulator:
-    def __init__(self, country_code):
+    def __init__(self, country_code, model_order, seasonal_order):
         self.country = country_code
+        self.model_order = model_order
+        self.seasonal_order = seasonal_order
         
         self.current_step = 0
         self.z_scores_history = []
@@ -44,9 +57,6 @@ class LiveSimulator:
         self.future_data = self.full_df.iloc[test_start_idx:]
 
     def refit_model(self):
-        """
-        Retrains the SARIMA model on the last 90 days .
-        """
         if len(self.history) > REFIT_WINDOW:
             train_data = self.history['load'].iloc[-REFIT_WINDOW:]
         else:
@@ -54,22 +64,18 @@ class LiveSimulator:
 
         model = sm.tsa.SARIMAX(
             train_data,
-            order=MODEL_ORDER,
-            seasonal_order=SEASONAL_ORDER,
+            order=self.model_order,
+            seasonal_order=self.seasonal_order,
             enforce_stationarity=False,
             enforce_invertibility=False
         )
 
-        
         try:
-            self.model_res = model.fit(disp=False)
+            self.model_res = model.fit(disp=False, maxiter=50)
         except Exception as e:
             print(f"Refit failed: {e}")
 
     def make_forecast(self, current_time):
-        """
-        Uses the currently fitted model to predict the next 24 hours.
-        """
         if self.model_res is None:
             self.refit_model()
 
@@ -96,15 +102,15 @@ class LiveSimulator:
             return pd.DataFrame({'yhat': [last_val]*24}, index=forecast_idx)
 
     def run_simulation(self):
-        print(f"Starting Smart Simulation for {min(len(self.future_data), SIM_START_HOURS)} steps...")
+        print(f"Starting simulation for {self.country} with order={self.model_order}, seasonal_order={self.seasonal_order}")
+        print(f"Running for {min(len(self.future_data), SIM_START_HOURS)} steps...")
 
-        # Initial Training
         self.refit_model()
         current_forecast_df = self.make_forecast(self.history.index[-1])
 
         steps_to_run = min(len(self.future_data), SIM_START_HOURS)
 
-        for i in tqdm(range(steps_to_run)):
+        for i in tqdm(range(steps_to_run), desc=f"{self.country}"):
             new_row = self.future_data.iloc[[i]]
             current_time = new_row.index[0]
             actual_load = new_row['load'].values[0]
@@ -122,7 +128,6 @@ class LiveSimulator:
                 residual = actual_load - pred_load
 
                 recent_hist = self.history['load'].iloc[-HISTORY_WINDOW:]
-                
                 diffs = (recent_hist - recent_hist.shift(24)).dropna()
                 mu = diffs.mean()
                 sigma = diffs.std() + 1e-6
@@ -160,9 +165,11 @@ class LiveSimulator:
         forecasts_df = pd.DataFrame(self.forecasts)
         forecasts_df.to_csv(os.path.join(OUTPUT_DIR, f'{self.country}_live_forecasts.csv'), index=False)
 
-        print("Simulation Complete.")
+        print(f"\n{self.country} Simulation Complete.")
         print(f"Total Updates: {len(logs_df)}")
-        print(logs_df['event'].value_counts())
+        if len(logs_df) > 0:
+            print(logs_df['event'].value_counts())
+        print("-" * 50)
 
     def check_drift(self, current_z):
         abs_z = abs(current_z)
@@ -175,7 +182,35 @@ class LiveSimulator:
 
 
 if __name__ == '__main__':
-    print("Simulator class defined.")
-    sim = LiveSimulator(COUNTRY)
-    print(f"Ready to simulate. History: {len(sim.history)}h. Future: {len(sim.future_data)}h")
-    sim.run_simulation()
+    import sys
+    
+    if len(sys.argv) > 1:
+        countries_to_run = sys.argv[1].split(',')
+    else:
+        countries_to_run = list(COUNTRY_CONFIGS.keys())
+    
+    print("=" * 50)
+    print(f"Running Live Simulations for: {', '.join(countries_to_run)}")
+    print("=" * 50)
+    
+    for country in countries_to_run:
+        if country not in COUNTRY_CONFIGS:
+            print(f"Warning: {country} not found in configurations, skipping...")
+            continue
+            
+        config = COUNTRY_CONFIGS[country]
+        print(f"\n{'='*50}")
+        print(f"Processing: {country}")
+        print(f"{'='*50}")
+        
+        sim = LiveSimulator(
+            country_code=country,
+            model_order=config['order'],
+            seasonal_order=config['seasonal_order']
+        )
+        print(f"History: {len(sim.history)}h, Future: {len(sim.future_data)}h")
+        sim.run_simulation()
+    
+    print("\n" + "="*50)
+    print("All simulations complete!")
+    print("="*50)

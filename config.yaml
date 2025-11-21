@@ -1,0 +1,243 @@
+# OPSD Power Desk Configuration
+# Central configuration for all countries, models, and parameters
+
+# =============================================================================
+# COUNTRIES & DATA SOURCES
+# =============================================================================
+countries:
+  DE:
+    name: "Germany"
+    load_column: "DE_load_actual_entsoe_transparency"
+    wind_column: "DE_wind_onshore_generation_actual"
+    solar_column: "DE_solar_generation_actual"
+    timezone: "Europe/Berlin"
+    
+  FR:
+    name: "France"
+    load_column: "FR_load_actual_entsoe_transparency"
+    wind_column: "FR_wind_onshore_generation_actual"
+    solar_column: "FR_solar_generation_actual"
+    timezone: "Europe/Paris"
+    
+  ES:
+    name: "Spain"
+    load_column: "ES_load_actual_entsoe_transparency"
+    wind_column: "ES_wind_onshore_generation_actual"
+    solar_column: "ES_solar_generation_actual"
+    timezone: "Europe/Madrid"
+
+# =============================================================================
+# SARIMA MODEL PARAMETERS (Best orders from grid search)
+# =============================================================================
+sarima_models:
+  DE:
+    order: [2, 1, 2]           # (p, d, q)
+    seasonal_order: [1, 1, 1, 24]  # (P, D, Q, s)
+    maxiter: 50
+    method: "lbfgs"
+    
+  FR:
+    order: [1, 1, 1]
+    seasonal_order: [1, 1, 1, 24]
+    maxiter: 50
+    method: "lbfgs"
+    
+  ES:
+    order: [1, 1, 1]
+    seasonal_order: [1, 1, 1, 24]
+    maxiter: 50
+    method: "lbfgs"
+
+# =============================================================================
+# FORECASTING PARAMETERS
+# =============================================================================
+forecasting:
+  # Train/Dev/Test split ratios
+  train_ratio: 0.80
+  dev_ratio: 0.10
+  test_ratio: 0.10
+  
+  # Backtest configuration
+  stride_hours: 168          # Weekly stride (7 days * 24 hours)
+  rolling_window_days: 30    # 30-day rolling training window
+  forecast_horizon_hours: 24 # 24-hour ahead forecast
+  
+  # Confidence intervals
+  confidence_levels:
+    - 0.80  # 80% prediction interval
+    - 0.95  # 95% prediction interval
+
+# =============================================================================
+# ANOMALY DETECTION THRESHOLDS
+# =============================================================================
+anomaly_detection:
+  # Z-score based detection
+  z_score_window_hours: 336   # 14 days * 24 hours
+  z_score_threshold: 3.0      # 3 standard deviations
+  
+  # EWMA drift detection
+  ewma_alpha: 0.1             # Smoothing parameter
+  drift_window_hours: 720     # 30 days * 24 hours
+  drift_percentile: 95        # 95th percentile threshold
+  
+  # Feature engineering windows
+  lag_features:
+    - 1    # 1 hour ago
+    - 24   # 1 day ago
+    - 168  # 1 week ago
+  
+  rolling_windows:
+    - 24   # 24-hour rolling stats
+    - 168  # 7-day rolling stats
+
+# =============================================================================
+# ML CLASSIFIER PARAMETERS
+# =============================================================================
+ml_classifier:
+  model_type: "LogisticRegression"
+  class_weight: "balanced"
+  test_split: 0.30
+  random_state: 42
+  
+  # Performance thresholds
+  min_pr_auc: 0.75           # Minimum required PR-AUC score
+  
+  # Feature list
+  features:
+    - "lag_1"
+    - "lag_24"
+    - "lag_168"
+    - "roll_mean_24"
+    - "roll_std_24"
+    - "roll_mean_168"
+    - "roll_std_168"
+    - "error"
+    - "abs_error"
+    - "pct_error"
+    - "z_score"
+
+# =============================================================================
+# ONLINE LEARNING / LIVE SIMULATION
+# =============================================================================
+online_learning:
+  simulation_hours: 2000      # Number of hours to simulate
+  refit_window_hours: 2160    # 90 days * 24 hours for retraining
+  history_window_hours: 336   # Context window for statistics
+  
+  # Update strategies
+  scheduled_refit_hour: 0     # Refit daily at midnight (hour 0)
+  enable_drift_adaptation: true
+  
+  # Performance monitoring
+  rolling_metrics_days: 7     # Calculate 7-day rolling metrics
+
+# =============================================================================
+# EVALUATION METRICS
+# =============================================================================
+metrics:
+  primary: "MASE"            # Primary evaluation metric
+  
+  calculated_metrics:
+    - "MSE"                  # Mean Squared Error
+    - "RMSE"                 # Root Mean Squared Error
+    - "MAE"                  # Mean Absolute Error
+    - "MAPE"                 # Mean Absolute Percentage Error
+    - "sMAPE"                # Symmetric MAPE
+    - "MASE"                 # Mean Absolute Scaled Error
+    - "Coverage"             # Prediction interval coverage
+  
+  # Naive baseline for MASE
+  naive_lag: 24              # 24-hour seasonal naive forecast
+
+# =============================================================================
+# FILE PATHS
+# =============================================================================
+paths:
+  data_dir: "data"
+  output_dir: "outputs"
+  notebooks_dir: "notebooks"
+  
+  # Input files
+  raw_data: "data/time_series_60min_singleindex.csv"
+  
+  # Output file patterns (use {country} placeholder)
+  country_data: "data/{country}.csv"
+  forecasts_dev: "outputs/{country}_forecasts_dev.csv"
+  forecasts_test: "outputs/{country}_forecasts_test.csv"
+  anomalies: "outputs/{country}_anomalies.csv"
+  sarima_orders: "outputs/{country}_sarima_orders.csv"
+  live_forecasts: "outputs/{country}_live_forecasts.csv"
+  online_updates: "outputs/{country}_online_updates.csv"
+  
+  # Aggregated outputs
+  metrics_summary: "outputs/metrics_summary.csv"
+  ml_evaluation: "outputs/anomaly_ml_eval.json"
+
+# =============================================================================
+# DASHBOARD CONFIGURATION
+# =============================================================================
+dashboard:
+  title: "OPSD PowerDesk"
+  layout: "wide"
+  default_country: "DE"
+  
+  # Visualization settings
+  default_window_hours: 336   # 14 days default view
+  chart_height: 500
+  
+  # KPI refresh rates
+  update_interval_seconds: 300  # Refresh every 5 minutes (for live mode)
+  
+  # Chart colors
+  colors:
+    actual: "black"
+    forecast: "#0000ff"
+    anomaly: "red"
+    confidence_band: "rgba(0, 0, 255, 0.2)"
+
+# =============================================================================
+# GRID SEARCH PARAMETERS (for hyperparameter tuning)
+# =============================================================================
+grid_search:
+  # SARIMA parameter ranges
+  p_range: [0, 1, 2]         # AR order
+  d_range: [1]               # Differencing order (fixed)
+  q_range: [0, 1, 2]         # MA order
+  P_range: [0, 1]            # Seasonal AR order
+  D_range: [1]               # Seasonal differencing (fixed)
+  Q_range: [0, 1]            # Seasonal MA order
+  s: 24                      # Seasonality (hourly data)
+  
+  # Optimization settings
+  subset_days: 30            # Use 30 days for faster grid search
+  maxiter: 50                # Max iterations per model
+  metric: "BIC"              # Selection criterion (BIC or AIC)
+
+# =============================================================================
+# LOGGING & MONITORING
+# =============================================================================
+logging:
+  level: "INFO"              # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  save_to_file: true
+  log_file: "outputs/powerdesk.log"
+
+# =============================================================================
+# ADVANCED SETTINGS
+# =============================================================================
+advanced:
+  # Data processing
+  handle_missing: "interpolate"  # Options: interpolate, forward_fill, drop
+  outlier_detection: true
+  outlier_threshold: 5.0         # Z-score threshold for outliers
+  
+  # Parallel processing
+  enable_parallel: false         # Enable multi-processing
+  n_jobs: -1                     # Number of cores (-1 = all available)
+  
+  # Caching
+  enable_cache: true
+  cache_dir: ".cache"
+  
+  # Reproducibility
+  random_seed: 42
