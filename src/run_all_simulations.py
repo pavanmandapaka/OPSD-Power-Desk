@@ -118,11 +118,15 @@ class LiveSimulator:
 
             try:
                 pred_load = current_forecast_df.loc[current_time, 'yhat']
+                lo_bound = current_forecast_df.loc[current_time, 'lo']
+                hi_bound = current_forecast_df.loc[current_time, 'hi']
 
                 self.forecasts.append({
                     'timestamp': current_time,
                     'y_true': actual_load,
-                    'yhat': pred_load
+                    'yhat': pred_load,
+                    'yhat_lo': lo_bound,
+                    'yhat_hi': hi_bound
                 })
 
                 residual = actual_load - pred_load
