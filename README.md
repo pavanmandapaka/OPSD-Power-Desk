@@ -15,8 +15,6 @@ Time series forecasting for European electricity load using SARIMA and GRU model
 ```bash
 python3 -m venv venv
 
-OR 
-
 source venv/bin/activate  
 
 pip install -r requirements.txt
